@@ -1,0 +1,65 @@
+[
+    {
+        "默认pretrain_batch_size":"16",
+        "默认finetune_batch_size":"16",
+        "默认finetune_epoch":"30",
+        "默认pretrain_epoch":"5",
+        "save_name": "local_test_search",
+        "dataset": {
+            "train_traj_df": "./samples/small_chengdu.h5",
+            "test_traj_df": "./samples/small_chengdu.h5",
+            "poi_df": "./samples/small_chengdu.h5",
+            "poi_embed": "./samples/small_chengdu_poi_embed.npy",
+            "road_embed": "./samples/small_chengdu_road_embed.npy"
+        },
+        "traj_clip": {
+            "embed_size": 64,
+            "d_model": 128
+        },
+        "pred_head": {
+            "input_size": 128,
+            "hidden_size": 256,
+            "output_size": 4315,
+            "pred_type": "classification"
+        },
+        "pretrain": {
+            "load": true,
+            "pretrain_save_name": "local_test",
+            "save": true,
+            "dataloader": {
+                "batch_size": 16,
+                "shuffle": true,
+                "num_workers": 0
+            },
+            "maml": true, 
+            "padder": {},
+            "config": {
+                "lr": 1e-3,
+                "num_epoch":5,
+                "meta_lr": 1e-4,  
+                "inner_lr": 1e-4, 
+                "num_inner_steps": 3, 
+                "k_shot": 10,      
+                "q_shot": 10  
+            }
+        },
+        "test": {
+            "task": "search",
+            "save": true,
+            "search_data_params":{
+                "num_target": 30,
+                "num_negative": 17,
+                "neg_random_choice": false
+            },
+            "dataloader": {
+                "batch_size": 16,
+                "num_workers": 0
+            },
+            "padder": {
+                "name": "search",
+                "params": {
+                }
+            }
+        }
+    }
+]

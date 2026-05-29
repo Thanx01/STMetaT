@@ -1,0 +1,23 @@
+.vscode/
+__pycache__/
+*.py[cod]
+*$py.class
+.DS_Store
+.ipynb_checkpoints/
+
+# Local datasets and generated artifacts
+datasets_from_Lin/
+processed_data/
+predictions/
+saved_model/
+saved_model_chengdu/
+settings/cache/
+
+# Large installers and logs
+*.run
+*.run.*
+wget-log
+
+# Local evaluation outputs
+evaluation_metrics.json
+evaluation_results.json

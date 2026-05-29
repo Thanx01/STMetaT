@@ -1,0 +1,88 @@
+[
+    {
+        "默认pretrain_batch_size":"16",
+        "默认finetune_batch_size":"16",
+        "默认finetune_epoch":"30",
+        "默认pretrain_epoch":"5",
+        "save_name": "local_test",
+        "dataset": {
+            "train_traj_df": "./datasets_from_Lin/xian/xian.h5",
+            "test_traj_df": "./datasets_from_Lin/xian/xian.h5",
+            "poi_df": "./datasets_from_Lin/xian/xian.h5",
+            "poi_embed": "./samples/small_xian_poi_embed.npy",
+            "road_embed": "./samples/small_xian_road_embed.npy"
+        },
+        "traj_clip": {
+            "embed_size": 64,
+            "d_model": 128
+        },
+        "pred_head": {
+            "input_size": 128,
+            "hidden_size": 256,
+            "output_size": 2,
+            "pred_type": "regression"
+        },
+        "pretrain": {
+            "load": false,
+            "save": true,
+            "dataloader": {
+                "batch_size": 16,
+                "shuffle": true,
+                "num_workers": 0
+            },
+            "maml": true, 
+            "padder": {},
+            "config": {
+                "lr": 1e-3,
+                "num_epoch": 100
+            }
+        },
+        "finetune": {
+            "load": false,
+            "save": true,
+            "dataloader": {
+                "batch_size": 16,
+                "shuffle": true,
+                "num_workers": 0
+            },
+            "padder": {
+                "name": "dp",
+                "params": {
+                    "pred_len": 5,
+                    "pred_cols": [
+                        "lng",
+                        "lat"
+                    ]
+                }
+            },
+            "config": {
+                "num_epoch": 30,
+                "lr": 1e-3,
+                "ft_encoder": true
+            }
+        },
+        "test": {
+            "task": "dp",
+            "save": true,
+            "dataloader": {
+                "batch_size": 16,
+                "num_workers": 0
+            },
+            "padder": {
+                "name": "dp",
+                "params": {
+                    "pred_len": 5,
+                    "pred_cols": [
+                        "lng",
+                        "lat"
+                    ]
+                }
+            },
+            "search_data_params": {
+                "num_target": 1000,
+                "num_negative": 5000,
+                "neg_random_choice": false
+            }
+        }
+    }
+]
