@@ -86,10 +86,10 @@ def selective_scan_fn(u, delta, A, B, C, D=None, z=None, delta_bias=None, delta_
 def selective_scan_ref(u, delta, A, B, C, D=None, z=None, delta_bias=None, delta_softplus=False,
                       return_last_state=False):
     """
-    选择性扫描算法
-    
-    对应Mamba论文Algorithm2中的第5，6步：A,B离散化、SSM计算
-    代码实现的很灵活，参数A,B,C可具有多种形式
+    Selective scan reference implementation.
+
+    This corresponds to the A/B discretization and SSM computation steps in Mamba Algorithm 2.
+    The implementation supports multiple shapes for A, B, and C.
     In Mamba block, A:r(D N), B: r(B N L), C: r(B N L)
 
     u: r(B D L)
@@ -117,8 +117,7 @@ def selective_scan_ref(u, delta, A, B, C, D=None, z=None, delta_bias=None, delta
     is_variable_B = B.dim() >= 3 # True with params B of Mamba block
     is_variable_C = C.dim() >= 3 # True
     
-    # Mamba block没用复数矩阵A，pass
-    # 矩阵A的元素是复数时，矩阵B,C的形状均应为r(B N 2L)，要将B,C中的元素按复数处理
+    # Complex A is not used in the current Mamba block, but the branch is kept for completeness.
     if A.is_complex():
         if is_variable_B:
             B = torch.view_as_complex(rearrange(B.float(), "... (L two) -> ... L two", two=2))
@@ -128,16 +127,12 @@ def selective_scan_ref(u, delta, A, B, C, D=None, z=None, delta_bias=None, delta
         B = B.float()
         C = C.float()
     
-    # 初始化ssm状态x为零
     x = A.new_zeros((batch, dim, dstate))
-    # 初始化输出列表ys
     ys = []
     
     '''
-    计算离散化的A：使用ZOH离散化
-    A:(d_inner, d_state) Δ:(B, d_inner, L) -> deltaA(B, d_inner, L, d_state)
-        - einsum 操作对Δ和A进行逐元素乘法：Δ和A先在相应的维度上广播，再执行元素相乘，即delta[:,:,:,None] * A[None,:,None,:]
-        - torch.exp 对乘积张量中的每个元素取指数
+    Discretize A with zero-order hold.
+    A: (d_inner, d_state), delta: (B, d_inner, L) -> deltaA: (B, d_inner, L, d_state)
     ''' 
     deltaA = torch.exp(torch.einsum('bdl,dn->bdln', delta, A))
     
@@ -146,8 +141,7 @@ def selective_scan_ref(u, delta, A, B, C, D=None, z=None, delta_bias=None, delta
     else:
         if B.dim() == 3:
             '''
-            计算离散化的B：使用一个简化的Euler discretization
-            Δ,u:(B, L, d_inner) B:(B, d_state, L) -> deltaB_u(B, d_inner, L, d_state): 代表了输入u对状态的直接影响
+            Discretize B with a simplified Euler discretization.
             '''
             deltaB_u = torch.einsum('bdl,bnl,bdl->bdln', delta, B, u)
         else: # B.dim() == 4
@@ -161,35 +155,24 @@ def selective_scan_ref(u, delta, A, B, C, D=None, z=None, delta_bias=None, delta
     # Note that the below is sequential, while the official implementation does a much faster parallel scan that
     # is additionally hardware-aware (like FlashAttention).
     last_state = None
-    # 用for循环的方式实现只用来说明核心的逻辑，原代码中采用并行扫描算法
+    # This loop illustrates the core logic; the optimized implementation uses parallel scan.
     for i in range(u.shape[2]): # u.shape[2]=L
         '''
-        ssm的核心计算步骤1：更新状态x
-                        x(t + 1) = Ax(t) + Bu(t)
-            
-            deltaA[:, :, i]：deltaA中第i个时间步的切片  shape(B, d_inner, d_state)
-            deltaB_u[:, :, i]：deltaB_u中第i个时间步的切片  shape(B, d_inner, d_state)
-            x：状态向量，代表当前时间步的状态  shape(B, d_inner, d_state)
-
-            deltaA[:, i] * x：逐元素乘法操作，根据当前时间步的转换矩阵deltaA更新状态向量x
-            + deltaB_u[:, i]：将输入的影响加到更新后的状态向量x上
+        SSM step 1: update state x.
+        x(t + 1) = A x(t) + B u(t)
         '''
         x = deltaA[:, :, i] * x + deltaB_u[:, :, i]
 
         '''
-        ssm的核心计算步骤2：计算输出y
-                        y(t) = Cx(t)
+        SSM step 2: compute output y.
+        y(t) = C x(t)
         '''
         if not is_variable_C:
             y = torch.einsum('bdn,dn->bd', x, C)
         else:
             if C.dim() == 3:
                 '''
-                C[:, :, i]：输出参数矩阵C中第i个时间步的切片  shape(B, d_state)
-                y：模型在当前时间步对输入序列的响应  shape(B, d_inner)
-
-                'bdn,bn->bd'是einsum的索引模式，指示了如何执行点乘和求和操作
-                其中，'b'表示批次维度保持不变，'dn'表示x的第二三个维度与C[:, :, i]的第二个维度进行点乘，'bd'表示输出y的形状应与x的前两个维度相同
+                C[:, :, i] is the C slice at the current time step with shape (B, d_state).
                 '''
                 y = torch.einsum('bdn,bn->bd', x, C[:, :, i])
             else:
@@ -200,19 +183,17 @@ def selective_scan_ref(u, delta, A, B, C, D=None, z=None, delta_bias=None, delta
         if y.is_complex():
             y = y.real * 2
         
-        ys.append(y) # 将y添加到ys
-    # 堆叠ys生成y
+        ys.append(y)
     y = torch.stack(ys, dim=2) # (batch dim L) dim=d_inner
     
     '''
-    生成论文Mamba Block结构第一个分支的输出
-        y(t) = Cx(t) [+ Du(t)]      # 残差连接可选
+    Generate the first branch output in the Mamba block.
+        y(t) = C x(t) [+ D u(t)]
     '''
     out = y if D is None else y + u * rearrange(D, "d -> d 1")
     
-    # 将第一、二个分支的输出相乘
     if z is not None: 
-        # 将z的SiLU激活结果与y相乘——2nd activation in Mamba Block
+        # Multiply the y branch by the SiLU-activated z branch.
         out = out * F.silu(z)
     
     out = out.to(dtype=dtype_in)

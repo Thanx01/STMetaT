@@ -33,31 +33,31 @@ from .ssd_combined import mamba_split_conv1d_scan_combined
 class TrajMamba2(nn.Module):
     def __init__(
         self,
-        d_model, # 模型输入输出维度 D
-        d_inner=0, # 指定模型内部维度
-        d_state=128, # 状态空间的维度 N [从Mamba-1的16扩大到128]
-        d_conv=4, # 1D卷积的卷积核大小
+        d_model,
+        d_inner=0,
+        d_state=128,
+        d_conv=4,
         conv_init=None,
-        expand=2, # 扩展因子 E (the controllable expansion factor)
-        headdim=64, # head 的维度 P, 即一个单头有P个通道 [Mamba-1的P=1(SISO)]
+        expand=2,
+        headdim=64,
         d_ssm=None,  # If not None, we only apply SSM on this many dimensions, the rest uses gated MLP
         ngroups=1,
         A_init_range=(1, 16),
         D_has_hdim=False,
-        rmsnorm=True, # 是否在最后的输出投影层前添加一个额外的规范化层
+        rmsnorm=True,
         norm_before_gate=False,
         dt_min=0.001,
         dt_max=0.1,
         dt_init_floor=1e-4,
         dt_limit=(0.0, float("inf")),
-        bias=False, # 其他层（如线性层）是否使用偏置项
-        conv_bias=True, # 卷积层是否使用偏置项
+        bias=False,
+        conv_bias=True,
         # Fused kernel and sharding options
         chunk_size=256,
         use_mem_eff_path=True,
         layer_idx=None,  # Absorb kwarg for general module
         process_group=None,
-        sequence_parallel=True, # 是否应用序列并行策略
+        sequence_parallel=True,
         device=None,
         dtype=None,
         aux_feature_size=0,
@@ -73,16 +73,13 @@ class TrajMamba2(nn.Module):
         self.sequence_parallel = sequence_parallel
         self.world_size = 1 if process_group is None else process_group.size()
         self.local_rank = 0 if process_group is None else process_group.rank()
-        # self.d_inner: 内部维度
         self.d_inner = d_inner // self.world_size if d_inner else (self.expand * self.d_model) // self.world_size
-        assert self.d_inner * self.world_size == d_inner if d_inner else self.expand * self.d_model # 确保整除
+        assert self.d_inner * self.world_size == d_inner if d_inner else self.expand * self.d_model
         self.headdim = headdim
-        # self.d_ssm: ssm的总维度
         self.d_ssm = self.d_inner if d_ssm is None else d_ssm // self.world_size
         assert ngroups % self.world_size == 0
         self.ngroups = ngroups // self.world_size
         assert self.d_ssm % self.headdim == 0
-        # self.nheads: 多头SSM的haed个数
         self.nheads = self.d_ssm // self.headdim
         self.D_has_hdim = D_has_hdim
         self.rmsnorm = rmsnorm
@@ -111,11 +108,11 @@ class TrajMamba2(nn.Module):
             groups=conv_dim,
             padding=d_conv - 1,
             **factory_kwargs,
-        ) # B*in_channels*L → B*out_channels*(L + d_conv-1)
+        ) # B * in_channels * L -> B * out_channels * (L + d_conv - 1)
         if self.conv_init is not None:
             nn.init.uniform_(self.conv1d.weight, -self.conv_init, self.conv_init)
 
-        self.act = nn.SiLU() # 激活函数固定为SiLU
+        self.act = nn.SiLU()
 
         # Initialize log dt bias    so that F.softplus(dt_bias) is between dt_min and dt_max
         dt = torch.exp(
@@ -130,7 +127,7 @@ class TrajMamba2(nn.Module):
         # name.endswith("bias") in param_grouping.py
         self.dt_bias._no_weight_decay = True
 
-        ## ssm参数 A、D 与输入无关
+        # SSM parameters A and D are input-independent.
         assert A_init_range[0] > 0 and A_init_range[1] >= A_init_range[0]
         A = torch.empty(self.nheads, dtype=torch.float32, device=device).uniform_(*A_init_range) # (nheads)
         A_log = torch.log(A).to(dtype=dtype) # also Keep A_log in fp32 in update version: delete ".to(dtype=dtype)"
@@ -161,7 +158,7 @@ class TrajMamba2(nn.Module):
             (in case batch is small).
         Returns: same shape as u
         """
-        # 要么ssm参数由输入构造；否则需确保传入参数B, C, dt不为None
+        # If SSM parameters are externally generated, B, C, and dt must be provided.
         assert not self.no_gen_bcdt or B is not None
         # assert self.aux_feature_size==0 or (self.aux_feature_size and B is not None)
 
@@ -250,10 +247,9 @@ class TrajMamba2(nn.Module):
                     activation=self.activation,
                 ).transpose(1, 2)
             
-            if self.no_gen_bcdt: # 变量xBC即为x，B,C 用传入参数
+            if self.no_gen_bcdt:
                 x = xBC
             else:
-                # 从Conv的输出直接分割出x, B, C   
                 x, B, C = torch.split(xBC, [self.d_ssm, self.ngroups * self.d_state, self.ngroups * self.d_state], dim=-1)
             
             y = mamba_chunk_scan_combined(
@@ -328,12 +324,11 @@ class TrajMamba2(nn.Module):
                 self.activation,
             )
 
-        if self.no_gen_bcdt: # 变量xBC即为x，B,C 用传入参数
+        if self.no_gen_bcdt:
             x = xBC
             B, C, dt = bcdt[0].squeeze(1), bcdt[1].squeeze(1), bcdt[2].squeeze(1)
         else:
-            # 从Conv的输出直接分割出x, B, C
-                # x: (B, self.d_ssm)  B,C: (B, self.ngroups*self.d_state)
+            # Split x, B, and C directly from the convolution output.
             x, B, C = torch.split(xBC, [self.d_ssm, self.ngroups * self.d_state, self.ngroups * self.d_state], dim=-1)
         
         A = -torch.exp(self.A_log.float())  # (nheads,)
@@ -343,22 +338,22 @@ class TrajMamba2(nn.Module):
             assert self.ngroups == 1, "Only support ngroups=1 for this inference code path"
             # Discretize A and B
             dt = F.softplus(dt + self.dt_bias.to(dtype=dt.dtype))  # (batch, nheads)
-            # 对A，使用ZOH离散化
+            # Discretize A with zero-order hold.
             dA = torch.exp(dt * A)  # (batch, nheads)
             x = rearrange(x, "b (h p) -> b h p", p=self.headdim) # (B, self.d_ssm) -> (B, self.nheads, self.headdim)
-            # 对B，使用一个简化的Euler discretization
+            # Discretize B with a simplified Euler discretization.
             dBx = torch.einsum("bh,bn,bhp->bhpn", dt, B, x) # (B, self.nheads, self.headdim, self.d_state)
-            # SSM式1: h_t = Ah_{t-1} + Bx_t
+            # SSM equation 1: h_t = A h_{t-1} + B x_t
             ssm_state.copy_(ssm_state * rearrange(dA, "b h -> b h 1 1") + dBx) # (B, self.nheads, self.headdim, self.d_state)
-            # SSM式2: y_t = Ch_t
+            # SSM equation 2: y_t = C h_t
             y = torch.einsum("bhpn,bn->bhp", ssm_state.to(dtype), C)
-            # +Dx, 残差
+            # Add the D skip connection.
             y = y + rearrange(self.D.to(dtype), "h -> h 1") * x
             y = rearrange(y, "b h p -> b (h p)")
             if not self.rmsnorm:
                 y = y * self.act(z)  # (B D)
         else:
-            # 对存储的原始参数 A,dt,dt_bias,D 沿单个head的内部维度P（以及状态空间的维度N——参数A）创建重复的序列
+            # Repeat stored A, dt, dt_bias, and D along the per-head dimension.
             A = repeat(A, "h -> h p n", p=self.headdim, n=self.d_state).to(dtype=torch.float32)
             dt = repeat(dt, "b h -> b h p", p=self.headdim)
             dt_bias = repeat(self.dt_bias, "h -> h p", p=self.headdim)

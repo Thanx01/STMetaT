@@ -1,9 +1,9 @@
 [
     {
-        "默认pretrain_batch_size":"16",
-        "默认finetune_batch_size":"16",
-        "默认finetune_epoch":"30",
-        "默认pretrain_epoch":"5",
+        "default_pretrain_batch_size":"16",
+        "default_finetune_batch_size":"16",
+        "default_finetune_epoch":"30",
+        "default_pretrain_epoch":"5",
         "save_name": "local_test",
         "dataset": {
             "train_traj_df": "./samples/small_chengdu.h5",

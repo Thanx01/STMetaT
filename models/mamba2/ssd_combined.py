@@ -821,7 +821,7 @@ class MambaSplitConv1dScanCombinedFn(torch.autograd.Function):
             out = F.linear(out, outproj_weight, outproj_bias)
         else:
             assert outproj_bias is None
-        ctx.have_BCdt = have_BCdt # B,C,dt是否无需计算
+        ctx.have_BCdt = have_BCdt
         ctx.save_for_backward(zxbcdt, conv1d_weight, conv1d_bias,
                               out_x, A, D, B, C, dt, dt_bias, initial_states, seq_idx, rmsnorm_weight, rstd, outproj_weight, outproj_bias)
         ctx.dt_limit = dt_limit
@@ -875,7 +875,7 @@ class MambaSplitConv1dScanCombinedFn(torch.autograd.Function):
             dzx0, dz, dxBC_given = torch.split(dzxbcdt, [2 * d_nonssm, dim, dim], dim=-1)
             dx = dxBC
             dB, dC, ddt_given = torch.empty_like(B), torch.empty_like(C), torch.empty_like(dt)
-            """ 无需reshape B,C """
+            """B and C do not need reshaping."""
         else:
             x, B, C = torch.split(xBC_conv, [dim, ctx.ngroups * dstate, ctx.ngroups * dstate], dim=-1)
             B = rearrange(B, "b l (g n) -> b l g n", g=ctx.ngroups)

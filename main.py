@@ -134,7 +134,7 @@ def main():
                         if_denormalize = True
                 predictions, targets = test_model(model=traj_clip, pred_head=pred_head, dataloader=test_dataloader, denormalize=if_denormalize)
             elif down_task == "search":
-                print("search 任务")
+                print("search task")
                 eval_dataset = os.path.basename(setting['dataset']['test_traj_df']).split(".")[0]
                 search_meta_dir = os.path.join(SEARCH_META_DIR, eval_dataset)
                 try:
@@ -157,8 +157,7 @@ def main():
                 print(f"the test metric for similar trajectory search:")
                 print(metric)
             
-                # 处理 arrival_time_estimation (TTE) 任务
-            elif down_task == "tte":  # 这里确保处理 tte 任务，即 Arrival Time Estimation
+            elif down_task == "tte":
                 test_padder = fetch_task_padder(padder_name=setting['test']['padder']['name'],
                                                 device=device, padder_params=setting['test']['padder']['params'])
                 test_dataloader = DataLoader(test_dataset, shuffle=False, collate_fn=test_padder,
@@ -179,11 +178,9 @@ def main():
             if setting['test'].get('save', False):
                 utils.create_if_noexists(os.path.join(PRED_SAVE_DIR, SAVE_NAME))
                 
-                # 根据任务名称动态命名文件
                 predictions_file = os.path.join(PRED_SAVE_DIR, SAVE_NAME, f'{down_task}_predictions.npy')
                 targets_file = os.path.join(PRED_SAVE_DIR, SAVE_NAME, f'{down_task}_targets.npy')
                 
-                # 保存预测结果和目标
                 np.save(predictions_file, predictions)
                 np.save(targets_file, targets)
                 

@@ -54,23 +54,23 @@ def maml_train(model, dataloader, num_epochs, meta_lr, task_lr, device, num_shot
         meta_train_error = 0.0
         
         for batch in dataloader:
-            support_trajs, query_trajs = batch  # batch_size 个任务的支持集和查询集
+            support_trajs, query_trajs = batch
             # support_trajs: (batch_size, k_shot, 5), query_trajs: (batch_size, q_shot, 5)
             support_trajs = support_trajs.to(device)
             query_trajs = query_trajs.to(device)
-            support_lens = torch.tensor([support_trajs.shape[1]] * support_trajs.shape[0], device=device)  # 每个任务的长度
+            support_lens = torch.tensor([support_trajs.shape[1]] * support_trajs.shape[0], device=device)
             query_lens = torch.tensor([query_trajs.shape[1]] * query_trajs.shape[0], device=device)
             
-            # 内循环
+            # Inner loop.
             task_model = copy.deepcopy(model)
             task_optimizer = torch.optim.Adam(task_model.parameters(), lr=task_lr)
             for _ in range(num_shots):
                 task_optimizer.zero_grad()
-                loss_support = task_model.loss(support_trajs, support_lens)  # 直接传入批次数据
+                loss_support = task_model.loss(support_trajs, support_lens)
                 loss_support.backward()
                 task_optimizer.step()
             
-            # 外循环
+            # Outer loop.
             loss_query = task_model.loss(query_trajs, query_lens)
             meta_train_error += loss_query.item()
             loss_query.backward()
@@ -81,49 +81,43 @@ def maml_train(model, dataloader, num_epochs, meta_lr, task_lr, device, num_shot
 
 def get_city_from_path(dataset_path):
     """
-    从数据集路径中提取城市名称，假设城市名称为路径中包含的文件夹名称（例如 'chengdu' 或 'xian'）。
+    Extract the city name from a dataset path.
     """
-    # 提取文件夹名称作为城市名
-    city_name = dataset_path.split('/')[9]  # 根据路径层级调整索引
+    city_name = dataset_path.split('/')[9]
     return city_name    
 
 
 class MetaTaskDataset(Dataset):
-    """从 base_dataset 中按时间窗口和空间网格采样支持集和查询集，确保来自同一条轨迹。"""
+    """Sample support/query sets with temporal windows and spatial grids."""
     def __init__(self, base_dataset, num_tasks=10000, k_shot=5, q_shot=5, time_window=900, grid_size=0.005, device='cuda'):
         super().__init__()
         self.base_dataset = base_dataset
         self.num_tasks = num_tasks
         self.k_shot = k_shot
         self.q_shot = q_shot
-        self.time_window = time_window  # 时间窗口大小，单位：秒，例如 900 秒
-        self.grid_size = grid_size      # 空间网格大小，例如 0.005 度（约 1km）
+        self.time_window = time_window
+        self.grid_size = grid_size
         self.device = device
 
-        # 预处理：按网格和时间窗口组织轨迹
         self.grid_time_trajs = self._organize_by_grid_and_time()
 
     def _organize_by_grid_and_time(self):
-        """为每条轨迹分配网格 ID 和时间窗口。"""
+        """Assign a grid ID and a temporal window to each trajectory."""
         grid_time_trajs = {}
         min_lng, min_lat = self.base_dataset.spatial_border[0]
 
         for traj_id in self.base_dataset.traj_ids:
             traj = self.base_dataset.traj_df[self.base_dataset.traj_df[TRAJ_ID_COL] == traj_id].copy()
-            # 计算 delta_t
             traj[DT_COL] = traj[T_COL] - traj[T_COL].iloc[0]
-            # 确保道路列是数值型
             if traj[ROAD_COL].dtype not in [np.int64, np.float64]:
                 traj[ROAD_COL] = pd.to_numeric(traj[ROAD_COL], errors='coerce').fillna(0).astype(np.int64)
 
-            # 计算轨迹的平均经纬度
             avg_lng = traj[X_COL].mean()
             avg_lat = traj[Y_COL].mean()
             grid_x = int((avg_lng - min_lng) // self.grid_size)
             grid_y = int((avg_lat - min_lat) // self.grid_size)
             grid_id = (grid_x, grid_y)
 
-            # 按时间窗口分组轨迹
             traj['time_window'] = (traj[T_COL] // self.time_window).astype(int)
             for window_key, group in traj.groupby('time_window'):
                 key = (grid_id, window_key)
@@ -140,24 +134,20 @@ class MetaTaskDataset(Dataset):
         return self.num_tasks
 
     def __getitem__(self, index):
-        """返回一个任务的支持集和查询集，来自同一网格和时间窗口的同一条轨迹。"""
-        # 随机选择一个网格和时间窗口
+        """Return one support/query task from the same grid and time window."""
         keys = list(self.grid_time_trajs.keys())
         selected_key = keys[np.random.randint(len(keys))]
         trajs_in_key = self.grid_time_trajs[selected_key]
 
-        # 随机选择一条轨迹
         selected_traj = trajs_in_key[np.random.randint(len(trajs_in_key))]
         traj_points = selected_traj['points']
 
-        # 确保轨迹点数足够
         while len(traj_points) < (self.k_shot + self.q_shot):
             selected_key = keys[np.random.randint(len(keys))]
             trajs_in_key = self.grid_time_trajs[selected_key]
             selected_traj = trajs_in_key[np.random.randint(len(trajs_in_key))]
             traj_points = selected_traj['points']
 
-        # 随机采样 k_shot + q_shot 个点
         sampled_indices = np.random.choice(len(traj_points), size=self.k_shot + self.q_shot, replace=False)
         support_indices = sampled_indices[:self.k_shot]
         query_indices = sampled_indices[self.k_shot:]
@@ -185,7 +175,7 @@ def main():
     with open(os.path.join(SETTINGS_CACHE_DIR, f'{datetime_key}.json'), 'w') as fp:
         json.dump(settings, fp)
 
-    # Iterate through the multiple settings.加载并构建训练和测试数据集。
+    # Iterate through the multiple settings.
     for setting_i, setting in enumerate(settings):
         print(f'===SETTING {setting_i}/{len(settings)}===')
         SAVE_NAME = setting.get('save_name', None)
@@ -196,7 +186,7 @@ def main():
         train_dataset = TrajClipDataset(traj_df=train_traj_df)
         test_dataset = TrajClipDataset(traj_df=test_traj_df)
 
-        # Load road segments and POIs' coordinates and textual embeddings.加载路段和 POI 的坐标和文本嵌入。
+        # Load road segments, POI coordinates, and textual embeddings.
         road_embed = np.load(setting['dataset']['road_embed'])
         poi_df = pd.read_hdf(setting['dataset']['poi_df'], key='pois')
         poi_embed = np.load(setting['dataset']['poi_embed'])
@@ -211,7 +201,6 @@ def main():
         print(f"Trajectory-Mamba Model size: {size_all_mb} MBytes.")
 
 
-        # 检查设置中是否包含预训练配置
         if 'pretrain' in setting:
             print("time_window = 2700")
             print(parser.parse_args())
@@ -223,26 +212,23 @@ def main():
             #         torch.load(os.path.join(MODEL_CACHE_DIR, f'{PRETRAIN_SAVE_NAME}.pretrain'), map_location=device)
             #     )
             # else:
-                # if setting['pretrain'].get('maml', False):  # MAML模式
-                    # 创建元任务数据集
-                    #成都时间步长为900秒，然而西安需要另外设置时间步长time_window，由于西安轨迹数据集更稀疏，所以时间步长设置为2700秒
-                    # 获取城市名称  
-            city_name = get_city_from_path(setting['dataset']['test_traj_df'])  # 提取城市名称
+                # if setting['pretrain'].get('maml', False):
+            city_name = get_city_from_path(setting['dataset']['test_traj_df'])
             print("city_name:", city_name)
-            time_window = 2700 if city_name == 'chengdu' else 2700  # 成都 900 秒，西安 5400 秒
+            time_window = 2700 if city_name == 'chengdu' else 2700
             meta_dataset = MetaTaskDataset(
                 base_dataset=train_dataset,
-                num_tasks=10000,  # 子任务数量
+                num_tasks=10000,
                 k_shot=setting['pretrain']['config']['k_shot'],
                 q_shot=setting['pretrain']['config']['q_shot'],
-                time_window=time_window,  # 15分钟 ,新增时间窗口参数
-                grid_size=0.005,  # 约 5km
+                time_window=time_window,
+                grid_size=0.005,
                 device=device
             )
 
             pretrain_dataloader = DataLoader(
                 meta_dataset,
-                batch_size=4096,  # 修改为 32 个任务，确保批次内有多轨迹数据
+                batch_size=4096,
                 shuffle=True,
                 num_workers=0
             )
@@ -260,8 +246,8 @@ def main():
                 utils.create_if_noexists(MODEL_CACHE_DIR)
                 PRETRAIN_SAVE_NAME = f"{SAVE_NAME}_pretrain_{datetime_key}_Ptrajm_maml_test_grid_size=0.005"
                 torch.save(traj_clip.state_dict(), os.path.join(MODEL_CACHE_DIR, f'{PRETRAIN_SAVE_NAME}.pretrain'))
-                # else:  # 原始CLIP预训练
-                    # # 创建预训练数据加载器
+                # else:
+                    # # Build the pre-training dataloader.
                     # pretrain_dataloader = DataLoader(
                     #     train_dataset,
                     #     collate_fn=PretrainPadder(
@@ -271,14 +257,14 @@ def main():
                     # )
                     # pretrain_model(model=traj_clip, dataloader=pretrain_dataloader, **setting['pretrain']['config'])
                     
-                    # # 检查是否需要保存预训练模型的参数
+                    # # Save pre-trained parameters if requested.
                     # if setting['pretrain'].get('save', True):
                     #     utils.create_if_noexists(MODEL_CACHE_DIR)
                     #     torch.save(traj_clip.state_dict(), os.path.join(MODEL_CACHE_DIR, f'{SAVE_NAME}.pretrain'))                        
 
         if 'finetune' in setting:
             # Finetune the trajectory embedding model and the prediction head on downstream tasks.
-            print('开始微调')
+            print('start finetuning')
             # if setting['finetune'].get('load', False):
             #     traj_clip.load_state_dict(torch.load(os.path.join(MODEL_CACHE_DIR, f'{SAVE_NAME}_trajclip.finetune')))
             #     pred_head.load_state_dict(torch.load(os.path.join(MODEL_CACHE_DIR, f'{SAVE_NAME}_predhead.finetune')))
@@ -289,7 +275,7 @@ def main():
                                                 **setting['finetune']['dataloader'])
             if_denormalize = False
             if isinstance(finetune_padder, DpPadder):
-                if sorted(finetune_padder.pred_cols) == sorted([Y_COL, X_COL]): # need to denormalize predictor optput
+                if sorted(finetune_padder.pred_cols) == sorted([Y_COL, X_COL]): # need to denormalize predictor output
                     if_denormalize = True
             finetune_model(model=traj_clip, pred_head=pred_head, dataloader=finetune_dataloader, denormalize=if_denormalize,
                             **setting['finetune']['config'])
@@ -302,11 +288,9 @@ def main():
 
         if 'test' in setting:
 
-            #在这里修改下游任务
-            
             down_task = setting['test'].get('task', "tte")
             if down_task == "dp":
-                print('dp任务')
+                print('dp task')
                 test_padder = fetch_task_padder(padder_name=setting['test']['padder']['name'],
                                                 device=device, padder_params=setting['test']['padder']['params'])
                 test_dataloader = DataLoader(test_dataset, shuffle=False, collate_fn=test_padder,
@@ -320,7 +304,7 @@ def main():
                 predictions, targets = test_model(model=traj_clip, pred_head=pred_head, dataloader=test_dataloader, denormalize=if_denormalize)
             
             elif down_task == "search":
-                print('search任务')
+                print('search task')
                 eval_dataset = os.path.basename(setting['dataset']['test_traj_df']).split(".")[0]
                 search_meta_dir = os.path.join(SEARCH_META_DIR, eval_dataset)
                 try:
@@ -345,7 +329,7 @@ def main():
                 print(metric)
 
             elif down_task == "tte":
-                print('tte任务')
+                print('tte task')
                 test_padder = fetch_task_padder(padder_name=setting['test']['padder']['name'],
                                                 device=device, padder_params=setting['test']['padder']['params'])
                 test_dataloader = DataLoader(test_dataset, shuffle=False, collate_fn=test_padder,
@@ -357,41 +341,33 @@ def main():
                 raise NotImplementedError(f'No downstream task called "{down_task}".')
 
             if setting['test'].get('save', False):
-                # 根据城市设定时间窗口（成都900秒、西安2700秒）
-                
-                # 获取城市名称
-                city_name = get_city_from_path(setting['dataset']['test_traj_df'])  # 提取城市名称
+                city_name = get_city_from_path(setting['dataset']['test_traj_df'])
 
                 time_window = 2700 if city_name == 'chengdu' else 2700
-                grid_size = 0.005  # 你代码中定义的固定网格大小
+                grid_size = 0.005
                 batch_size = setting['test']['dataloader']['batch_size']
 
 
-                # 构造保存路径
                 save_dir = os.path.join(
                     PRED_SAVE_DIR, 'meta', city_name, SAVE_NAME, down_task
                 )
                 utils.create_if_noexists(save_dir)
 
-                # 文件名前缀
                 save_file_prefix = f"{city_name}_tw{time_window}s_grid{grid_size}_bs{batch_size}"
                 
                 print("city_name:", city_name)
                 print(f"city: {city_name}, time_window: {time_window}, grid_size: {grid_size}, batch_size: {batch_size}")
 
-                # 创建以城市为基础的保存目录
-                city_dir = os.path.join(PRED_SAVE_DIR,'meta', city_name, SAVE_NAME, down_task)  # 创建城市文件夹 + 任务文件夹
+                city_dir = os.path.join(PRED_SAVE_DIR,'meta', city_name, SAVE_NAME, down_task)
                 print("city_dir:", city_dir)
 
-                # 确保目录存在
                 utils.create_if_noexists(city_dir)
 
-                # 保存预测和真实目标文件
                 np.save(os.path.join(city_dir, f'{save_file_prefix}_predictions.npy'), predictions)
                 np.save(os.path.join(city_dir, f'{save_file_prefix}_targets.npy'), targets)
-                print(f"文件已保存至：{city_dir}")
-                print(f"预测文件名：{save_file_prefix}_predictions.npy")
-                print(f"目标文件名：{save_file_prefix}_targets.npy")
+                print(f"files saved to: {city_dir}")
+                print(f"prediction file: {save_file_prefix}_predictions.npy")
+                print(f"target file: {save_file_prefix}_targets.npy")
                 if down_task == "search":
                     metric.to_hdf(os.path.join(city_dir, 'similar_trajectory_search.h5'), key='metric', format='table')
                 

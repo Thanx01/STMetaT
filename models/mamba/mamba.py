@@ -21,13 +21,13 @@ except ImportError:
 
 
 def create_block(
-    d_model, # 模型的隐藏层维度
+    d_model,
     aux_feature_size=0,
     ssm_cfg=None,
     norm_epsilon=1e-5,
-    rms_norm=False,  # 是否使用RMSNorm
+    rms_norm=False,
     residual_in_fp32=False,
-    fused_add_norm=False, # 是否融合add + layer_norm
+    fused_add_norm=False,
     layer_idx=None,
     device=None,
     dtype=None,
@@ -36,9 +36,7 @@ def create_block(
         ssm_cfg = {}
     factory_kwargs = {"device": device, "dtype": dtype}
     
-    # Block的核心组件
     mixer_cls = partial(TrajMamba, aux_feature_size=aux_feature_size, layer_idx=layer_idx, **ssm_cfg, **factory_kwargs)
-    # 归一化模块，用于归一化操作
     norm_cls = partial(
         nn.LayerNorm if not rms_norm else RMSNorm, eps=norm_epsilon, **factory_kwargs
     )
@@ -94,7 +92,7 @@ class TrajMixerModel(nn.Module):
                     rms_norm=rms_norm,
                     residual_in_fp32=residual_in_fp32,
                     fused_add_norm=fused_add_norm,
-                    layer_idx=i, # 0 ~ n_layer-1 顺次
+                    layer_idx=i,
                     **factory_kwargs,
                 )
                 for i in range(n_layer)

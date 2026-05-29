@@ -31,7 +31,7 @@ def create_block(
     headdim = 64,
     d_inner = 0,
     ssm_cfg=None,
-    attn_layer_idx=None, # 指定某些层的mixer选用multihead attention
+    attn_layer_idx=None,
     attn_cfg=None,
     norm_epsilon=1e-5,
     rms_norm=False,
@@ -99,7 +99,7 @@ class TrajMixerModel2(nn.Module):
         residual_in_fp32=True,
         device=None,
         dtype=None,
-        bias=False, # 其他层（如线性层）是否使用偏置项（与class Mamba2的相应参数的默认值保持一致）
+        bias=False,
     ) -> None:
         factory_kwargs = {"device": device, "dtype": dtype}
         super().__init__()
@@ -139,7 +139,7 @@ class TrajMixerModel2(nn.Module):
         print(f"d_model={self.layers[0].mixer.d_model}, d_inner={self.layers[0].mixer.d_inner}")
         print(f"d_state={self.layers[0].mixer.d_state}, headdim={self.layers[0].mixer.headdim}")
 
-        # 构造SSM输入相关参数B,C,Δ的线性投影层
+        # Build the linear projection for input-dependent SSM parameters B, C, and dt.
         if aux_feature_size:
             self.bcdt_proj_outdim = 0
             self.bcdt_dim_list = []
@@ -175,7 +175,7 @@ class TrajMixerModel2(nn.Module):
 
     def forward(self, hidden_states, aux_features, inference_params=None, **mixer_kwargs):
         if self.bcdt_proj is not None:
-            all_bcdt = self.bcdt_proj(aux_features) # 一次性生成所有block的SSM输入相关参数B,C,Δ
+            all_bcdt = self.bcdt_proj(aux_features)
             all_bcdt_tuple = torch.split(all_bcdt, self.bcdt_dim_list, dim=-1)
         else:
             all_bcdt_tuple = (None,) * self.num_bcdt

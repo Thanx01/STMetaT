@@ -35,7 +35,7 @@ class TrajClip(nn.Module):
 
         super().__init__()
 
-        self.poi_coors = nn.Parameter(torch.from_numpy(poi_coors).float(), requires_grad=False) # n_pois：12439[chengdu]
+        self.poi_coors = nn.Parameter(torch.from_numpy(poi_coors).float(), requires_grad=False)
         self.spatial_border = nn.Parameter(torch.tensor(spatial_border), requires_grad=False)
         self.road_weight = road_weight
         self.poi_weight = poi_weight
@@ -87,17 +87,16 @@ class TrajClip(nn.Module):
         self.cross_entropy = nn.CrossEntropyLoss()
 
     def cal_traj_h(self, norm_spatial, temporal, aux_features, valid_lens):
-        """计算轨迹的嵌入向量，基于它们的空间和时间特征。
-        轨迹的空间和时间特征的详细定义可以参考 `data.py`。
+        """Calculate trajectory embeddings from spatial and temporal features.
 
-        参数：
-            norm_patial (FloatTensor): 轨迹的空间特征，形状为 (B, L, F_s)。
-            temporal (FloatTensor): 轨迹的时间特征，形状为 (B, L, F_t)。
-            valid_lens (LongTensor): 轨迹的有效长度，形状为 (B,)。
-            aux_features (FloatTensor): 轨迹的高阶特征，形状为 (B, L, F_h=3) 或 None。
+        Args:
+            norm_patial (FloatTensor): normalized spatial features with shape (B, L, F_s).
+            temporal (FloatTensor): temporal features with shape (B, L, F_t).
+            valid_lens (LongTensor): valid trajectory lengths with shape (B,).
+            aux_features (FloatTensor): high-order features with shape (B, L, F_h=3) or None.
 
-        返回：
-            FloatTensor: 轨迹的嵌入向量，形状为 (B, E)。
+        Returns:
+            FloatTensor: trajectory embeddings with shape (B, E).
         """
         B, L = norm_spatial.size(0), norm_spatial.size(1)
         positions = repeat(torch.arange(L), 'L -> B L', B=B).to(valid_lens.device)
@@ -182,12 +181,11 @@ class TrajClip(nn.Module):
         road_h = road_h / road_h.norm(dim=1, keepdim=True)
         poi_h = poi_h / poi_h.norm(dim=1, keepdim=True)
         # logit_scale = self.logit_scale.exp()
-        # clamp操作
         logit_scale = torch.clamp(self.logit_scale.exp(), max=100)
-        logit_road = logit_scale * traj_h @ road_h.t()# 轨迹与道路的相似度
-        logit_poi = logit_scale * traj_h @ poi_h.t()# 轨迹与POI的相似度
+        logit_road = logit_scale * traj_h @ road_h.t()
+        logit_poi = logit_scale * traj_h @ poi_h.t()
 
-        label = torch.arange(B).long().to(input_seq.device)# batch标签
+        label = torch.arange(B).long().to(input_seq.device)
         loss_road = (self.cross_entropy(logit_road, label) + self.cross_entropy(logit_road.t(), label)) / 2
         loss_poi = (self.cross_entropy(logit_poi, label) + self.cross_entropy(logit_poi.t(), label)) / 2
         loss = self.road_weight * loss_road + self.poi_weight * loss_poi
@@ -212,7 +210,7 @@ class TrajClip(nn.Module):
         time_diff = temporal[:, 1:, 1] - temporal[:, :-1, 1]
         time_diff = time_diff.masked_fill(time_diff == 0, 1)
         speeds = torch.div(dists, time_diff) # (B,L-1)
-        speeds = torch.concatenate([speeds[:,:1], speeds],dim=-1) # 将轨迹起始速度v0置为求出的第一个速度
+        speeds = torch.concatenate([speeds[:,:1], speeds],dim=-1)
         speeds = speeds.masked_fill(batch_mask, 0) # need to do masked_fill for padding trajectories!
 
         speed_diff = speeds[:, 1:] - speeds[:, :-1]
@@ -292,11 +290,11 @@ def geo_distance(a_coor, b_coor):
 
 
 def adapted_params(self, params_dict):
-    """生成适应后的参数副本"""
+    """Generate an adapted parameter copy."""
     adapted = OrderedDict()
     for name, param in self.named_parameters():
         if name in params_dict:
-            adapted[name] = param + params_dict[name]  # 简单加法适配
+            adapted[name] = param + params_dict[name]
         else:
             adapted[name] = param
     return adapted

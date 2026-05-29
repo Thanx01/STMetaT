@@ -30,18 +30,18 @@ except ImportError:
 class TrajMamba(nn.Module):
     def __init__(
         self,
-        d_model, # 模型的隐藏层维度 D
-        d_state=16, # 状态空间的维度 N
-        d_conv=4, # 1D卷积的卷积核大小
-        expand=2, # 扩展因子 E (the controllable expansion factor)
-        dt_rank="auto", # 定义输入依赖的参数Δ的秩，'auto'表示自动设置
+        d_model,
+        d_state=16,
+        d_conv=4,
+        expand=2,
+        dt_rank="auto",
         dt_min=0.001,
         dt_max=0.1,
         dt_init="random",
         dt_scale=1.0,
         dt_init_floor=1e-4,
-        conv_bias=True, # 卷积层是否使用偏置项
-        bias=False, # 其他层（如线性层）是否使用偏置项
+        conv_bias=True,
+        bias=False,
         use_fast_path=True,  # Fused kernel options
         layer_idx=None,
         device=None,
@@ -71,7 +71,7 @@ class TrajMamba(nn.Module):
             groups=self.d_inner,
             padding=d_conv - 1,
             **factory_kwargs,
-        ) # B*in_channels*L → B*out_channels*(L + d_conv-1)
+        ) # B * in_channels * L -> B * out_channels * (L + d_conv - 1)
 
         self.activation = "silu"
         self.act = nn.SiLU()
@@ -102,7 +102,7 @@ class TrajMamba(nn.Module):
         self.dt_proj.bias._no_reinit = True
 
         # S4D real initialization
-        ## ssm参数 A、D 与输入无关
+        # SSM parameters A and D are input-independent.
         A = repeat(
             torch.arange(1, self.d_state + 1, dtype=torch.float32, device=device),
             "n -> d n",
@@ -118,7 +118,7 @@ class TrajMamba(nn.Module):
 
         self.out_proj = nn.Linear(self.d_inner, self.d_model, bias=bias, **factory_kwargs)
 
-    # Input: x(𝙱, 𝙻, 𝙳) → Output: y(𝙱, 𝙻, 𝙳)
+    # Input: x(B, L, D) -> Output: y(B, L, D)
     def forward(self, hidden_states, aux_features=None, inference_params=None):
         """
         hidden_states: (B, L, D)
@@ -193,7 +193,7 @@ class TrajMamba(nn.Module):
             
             x_dbl = self.x_proj(rearrange(src_params if self.aux_feature_size else x, "b d l -> (b l) d"))  # (bl d)
             
-            # Δ: [(B L), dt_rank]   B, C: [(B L), d_state]
+            # Delta: [(B L), dt_rank]   B, C: [(B L), d_state]
             dt, B, C = torch.split(x_dbl, [self.dt_rank, self.d_state, self.d_state], dim=-1)
             
             dt = self.dt_proj.weight @ dt.t() # shape [d_inner, (B L)]
