@@ -29,7 +29,7 @@ The `samples/` directory contains small Chengdu and Xian HDF5/NumPy files for de
 
 ## Model Structure
 
-![STMetaT architecture](./assets/stmetat_architecture.svg)
+![STMetaT architecture](./assets/01.png)
 
 STMetaT first constructs spatio-temporal constraint subsets from raw trajectories, then uses a multi-view local encoder to fuse GPS, route, and POI representations. The meta-learning process optimizes these sub-tasks through inner-loop adaptation and outer-loop updates for spatio-temporal heterogeneity fusion.
 
