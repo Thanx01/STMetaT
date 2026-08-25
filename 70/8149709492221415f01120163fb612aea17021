@@ -1,0 +1,19 @@
+README.md
+  s_c6d8a6a967b6ba::t_2c74062f404373 30,89-92
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.7",
+  "base_commit_sha": "708149709492221415f01120163fb612aea17021",
+  "prompts": {},
+  "sessions": {
+    "s_c6d8a6a967b6ba": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "s_c6d8a6a967b6ba",
+        "model": "unknown"
+      },
+      "human_author": "xuzhouzheng <xuzhouzheng@kingsoft.com>"
+    }
+  }
+}
