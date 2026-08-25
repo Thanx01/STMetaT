@@ -1,0 +1,19 @@
+README.md
+  s_50ee94a1548c8d::t_19314e49336168 1,3,5,7,9-53,55,58-59,62-78,81-84,87-93,95,97-99,101,103-106,108,110,112-119,123-124,126-133,136-139
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.7",
+  "base_commit_sha": "6d7281246df1df4757c3dd9c5204de64209a659a",
+  "prompts": {},
+  "sessions": {
+    "s_50ee94a1548c8d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fd145-e9dc-7470-8c91-c6df968f1ef9",
+        "model": "unknown"
+      },
+      "human_author": "xuzhouzheng <xuzhouzheng@kingsoft.com>"
+    }
+  }
+}
