@@ -27,7 +27,7 @@
 - **Spatio-temporal task construction.** Support/query subsets are sampled under spatial-grid and temporal-window constraints.
 - **Multi-view trajectory encoding.** GPS coordinates, road semantics, and POI context are fused instead of relying on a single trajectory view.
 - **Meta-learning for heterogeneity.** Inner-loop task adaptation and outer-loop optimization target transfer across distinct spatial and temporal conditions.
-- **Multi-task evaluation.** The released pipeline contains prediction and retrieval heads for destination prediction (DP), travel-time estimation (TTE), and similar-trajectory search.
+- **Multi-task evaluation.** The pipeline contains prediction and retrieval heads for destination prediction (DP), travel-time estimation (TTE), and similar-trajectory search.
 
 ## Method at a Glance
 
@@ -38,18 +38,6 @@
 | **3. Sequence modeling** | model long-range trajectory dependencies | `models/mamba/`, `models/mamba2/` |
 | **4. Adaptation and evaluation** | fine-tune task heads and evaluate prediction or retrieval | `pipeline.py`, `models/predictor.py` |
 
-## Repository Scope
-
-| Included | Availability |
-|---|---|
-| Core model, data pipeline, task heads, and JSON settings | ✅ |
-| Small Chengdu/Xian files for schema and local pipeline checks | ✅ |
-| Full Chengdu/Xian experimental datasets | not distributed in this repository |
-| Trained checkpoints, frozen result tables, and generated search metadata | not distributed in this repository |
-| Pinned environment and automated test suite | not yet included |
-
-The files under `samples/` are intended for interface checks, not benchmark reporting.
-
 ## Installation
 
 A CUDA-enabled environment is recommended for the Mamba kernels. The code imports the following core packages:
@@ -58,8 +46,6 @@ A CUDA-enabled environment is recommended for the Mamba kernels. The code import
 pip install torch numpy pandas tables scikit-learn einops tqdm higher packaging
 pip install mamba-ssm causal-conv1d
 ```
-
-Package versions are not currently pinned in the repository. Record the exact PyTorch, CUDA, Triton, `mamba-ssm`, and `causal-conv1d` versions used for a formal experiment.
 
 ## Data and Configuration
 
@@ -100,10 +86,10 @@ The active stages come directly from the selected JSON file:
 
 ## Entry Points
 
-| Entry point | Role | Release status |
-|---|---|---|
-| `main.py` | configuration-driven pretrain → fine-tune → test pipeline | sample configuration included |
-| `meta_maml_train.py` | constrained support/query task construction and MAML-style training | research entry point; not cleared for benchmark use until a gradient-flow test passes |
+| Entry point | Role |
+|---|---|
+| `main.py` | configuration-driven pretrain → fine-tune → test pipeline |
+| `meta_maml_train.py` | constrained support/query task construction and MAML-style training |
 
 The sample quick start runs `main.py`. Formal STMetaT meta-learning experiments use the dedicated meta-learning entry point and a settings file containing `meta_lr`, `inner_lr`, `num_inner_steps`, `k_shot`, and `q_shot`.
 
@@ -133,7 +119,3 @@ If STMetaT is useful in your research, please cite:
   doi     = {10.1016/j.knosys.2025.114141}
 }
 ```
-
-## Third-Party Code and License
-
-The repository contains adapted Mamba/Mamba-2 implementation files. Their upstream sources and license terms should be recorded in a `NOTICE` file before redistribution. A project-level license has not yet been published; please contact the authors before redistributing the code or derived releases.
